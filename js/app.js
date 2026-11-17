@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.4.1';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -1147,17 +1147,94 @@
     return normalizePlay({ id: uid(), name: o.n, category: o.c, description: o.d, view: o.w,
       steps: o.s.map((s) => ({ pos: s.p, hidden: s.h || [], note: s.t || '' })) });
   }
-  async function encodePlay(p) {
-    const bytes = new TextEncoder().encode(JSON.stringify(compactPlay(p)));
-    if (window.CompressionStream) {
-      try { return 'z' + b64url(await streamBytes(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* sin comprimir */ }
+  /*
+   * Formato binario compacto (v2) para links cortos:
+   * cada posición entra en 2 bytes (precisión 10 cm) y de un paso al siguiente
+   * solo se mandan las piezas que se movieron. Los textos van comprimidos.
+   */
+  const BIN_IDS = IDS; // 13 jugadores + pelota
+  const posCode = (q) => Math.round(clamp(q[0] + 0.6, 0, 26.2) * 10) * 209 + Math.round(clamp(q[1] + 0.4, 0, 20.8) * 10);
+  const posDecode = (c) => [r1(Math.floor(c / 209) / 10 - 0.6), r1((c % 209) / 10 - 0.4)];
+
+  function packPlay(p) {
+    const out = [];
+    const u8 = (v) => out.push(v & 255);
+    const u16 = (v) => { out.push((v >> 8) & 255, v & 255); };
+    const str = (t) => {
+      const b = new TextEncoder().encode(t || '');
+      let n = b.length;
+      do { u8((n & 127) | (n > 127 ? 128 : 0)); n >>= 7; } while (n);
+      for (const x of b) out.push(x);
+    };
+    u8(2);
+    u8(p.view === 'full' ? 1 : 0);
+    u8(Math.max(0, CATEGORIES.indexOf(p.category)));
+    str(p.name);
+    u8(p.steps.length);
+    let prev = null;
+    for (const st of p.steps) {
+      const codes = BIN_IDS.map((id) => posCode(st.pos[id]));
+      let mask = 0;
+      codes.forEach((c, i) => { if (!prev || prev[i] !== c) mask |= 1 << i; });
+      u16(mask);
+      codes.forEach((c, i) => { if (mask & (1 << i)) u16(c); });
+      let hid = 0;
+      PIECES.forEach((pc, i) => { if (st.hidden.includes(pc.id)) hid |= 1 << i; });
+      u16(hid);
+      str(st.note);
+      prev = codes;
     }
-    return 'p' + b64url(bytes);
+    return new Uint8Array(out);
   }
+
+  function unpackPlay(b) {
+    let i = 0;
+    const u8 = () => b[i++];
+    const u16 = () => (b[i++] << 8) | b[i++];
+    const str = () => {
+      let n = 0, sh = 0, x;
+      do { x = u8(); n |= (x & 127) << sh; sh += 7; } while (x & 128);
+      const t = new TextDecoder().decode(b.subarray(i, i + n));
+      i += n;
+      return t;
+    };
+    if (u8() !== 2) return null;
+    const view = u8() ? 'full' : 'half';
+    const category = CATEGORIES[u8()] || 'Mis jugadas';
+    const name = str();
+    const n = u8();
+    const steps = [];
+    let prev = null;
+    for (let k = 0; k < n; k++) {
+      const mask = u16();
+      const codes = BIN_IDS.map((id, j) => (mask & (1 << j) ? u16() : prev[j]));
+      const hid = u16();
+      const pos = {};
+      BIN_IDS.forEach((id, j) => { pos[id] = posDecode(codes[j]); });
+      steps.push({ pos, hidden: PIECES.filter((pc, j) => hid & (1 << j)).map((pc) => pc.id), note: str() });
+      prev = codes;
+    }
+    return normalizePlay({ id: uid(), name, category, description: '', view, steps });
+  }
+
+  async function encodePlay(p) {
+    const raw = packPlay(p);
+    let best = 'b' + b64url(raw);
+    if (window.CompressionStream) {
+      try {
+        const z = 'c' + b64url(await streamBytes(raw, new CompressionStream('deflate-raw')));
+        if (z.length < best.length) best = z;
+      } catch (e) { /* queda sin comprimir */ }
+    }
+    return best;
+  }
+
   async function decodePlay(code) {
     let bytes = unb64url(code.slice(1));
-    if (code[0] === 'z') bytes = await streamBytes(bytes, new DecompressionStream('deflate-raw'));
-    return expandPlay(JSON.parse(new TextDecoder().decode(bytes)));
+    const kind = code[0];
+    if (kind === 'z' || kind === 'c') bytes = await streamBytes(bytes, new DecompressionStream('deflate-raw'));
+    if (kind === 'b' || kind === 'c') return unpackPlay(bytes);
+    return expandPlay(JSON.parse(new TextDecoder().decode(bytes))); // links viejos (v1.4.0)
   }
   const shareBase = () => location.origin + location.pathname;
 
@@ -1382,5 +1459,5 @@
   }
 
   // Para pruebas automáticas
-  window.__wp = { get play() { return play; }, get idx() { return idx; }, roster: () => roster };
+  window.__wp = { get play() { return play; }, get idx() { return idx; }, roster: () => roster, encodePlay, decodePlay };
 })();
