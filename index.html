@@ -33,6 +33,10 @@
       <svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3"/><path d="M8 21v-7h8v7"/></svg>
       <span class="lbl">Guardar</span>
     </button>
+    <button class="btn" id="btnShare" title="Compartir por WhatsApp: foto o video con voz">
+      <svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+      <span class="lbl">Compartir</span>
+    </button>
     <button class="btn" id="btnOpts" title="Opciones y números">
       <svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
       <span class="lbl">Opciones</span>
@@ -40,7 +44,7 @@
   </header>
 
   <main id="stage">
-    <svg id="pool" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Pileta de waterpolo">
+    <svg id="pool" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet" aria-label="Pileta de waterpolo">
       <defs>
         <linearGradient id="waterGrad" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stop-color="#1a86d6"/>
@@ -56,10 +60,40 @@
       </defs>
       <g id="poolG"></g>
       <g id="arrowsG"></g>
+      <g id="drawG"></g>
       <g id="piecesG"></g>
     </svg>
     <div id="caption" hidden></div>
+    <div id="recBar" class="rec-bar" hidden>
+      <span class="rec-dot"></span>
+      <span>Grabando</span>
+      <b id="recTime">00:00</b>
+      <span id="recMicIcon" title="Con micrófono">🎤</span>
+      <button class="btn rec-stop" id="btnStopRec">Detener</button>
+    </div>
+    <div id="drawBar" class="drawbar" hidden>
+      <button class="swatch" data-color="#facc15" title="Amarillo"></button>
+      <button class="swatch" data-color="#ef4444" title="Rojo"></button>
+      <button class="swatch" data-color="#ffffff" title="Blanco"></button>
+      <button class="swatch" data-color="#111827" title="Negro"></button>
+      <span class="sep"></span>
+      <button class="tool" id="toolArrow" title="Trazo con punta de flecha">
+        <svg viewBox="0 0 24 24"><path d="M4 18C9 16 13 11 18 6"/><path d="M12 6h6v6"/></svg>
+      </button>
+      <button class="tool" id="toolPen" title="Trazo libre">
+        <svg viewBox="0 0 24 24"><path d="M4 18c3-6 6 2 9-4s5-4 7-6"/></svg>
+      </button>
+      <span class="sep"></span>
+      <button class="tool" id="btnUndo" title="Deshacer el último trazo">
+        <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+      <button class="tool" id="btnClearDraw" title="Borrar los dibujos de este paso">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+      </button>
+      <button class="tool done" id="btnDrawDone">Listo</button>
+    </div>
     <div class="stage-tools">
+      <button class="chip" id="btnDraw" title="Dibujar sobre la pileta">✏️ Dibujar</button>
       <button class="chip" id="btnView" title="Cambiar vista">Media pileta</button>
       <button class="chip" id="btnArrows" title="Mostrar u ocultar flechas de movimiento">Flechas</button>
     </div>
@@ -168,8 +202,46 @@
         <li><b>Agregar paso</b> copia la posición actual en un paso nuevo: mové a los jugadores y repetí. Así se “graba” la jugada.</li>
         <li><b>▶</b> reproduce la jugada animada, paso por paso.</li>
         <li><b>Guardar</b> la manda a la biblioteca.</li>
+        <li><b>✏️ Dibujar</b>: trazá flechas o líneas con el dedo. Los dibujos quedan guardados en cada paso.</li>
+        <li><b>Compartir</b>: mandá una foto del paso o grabá un video explicando la jugada con tu voz.</li>
       </ul>
       <p class="muted small">Versión <span id="appVersion"></span></p>
+    </div>
+  </dialog>
+
+  <!-- Compartir -->
+  <dialog id="dlgShare">
+    <div class="dlg">
+      <div class="dlg-head">
+        <h2>Compartir</h2>
+        <button class="btn icon" data-close title="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <button class="share-opt" id="btnShareImg">
+        <b>📷 Foto del paso actual</b>
+        <span>Una imagen de la pileta como se ve ahora, con la nota y los dibujos.</span>
+      </button>
+      <div class="share-opt as-box">
+        <b>🎥 Video explicado con tu voz</b>
+        <span>Se graba la pileta mientras reproducís la jugada, movés jugadores o dibujás, y hablás. Al terminar tocá <b>Detener</b> y se abre para mandarlo.</span>
+        <label class="check"><input type="checkbox" id="recMic" checked> Grabar mi voz (micrófono)</label>
+        <p class="warn" id="recSupport" hidden>Este navegador no permite grabar video. Usá Chrome actualizado.</p>
+        <button class="btn rec" id="btnStartRec"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg><span>Empezar a grabar</span></button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Video grabado -->
+  <dialog id="dlgVideo" class="wide" data-keep>
+    <div class="dlg">
+      <h2>Video listo</h2>
+      <video id="videoPreview" controls playsinline></video>
+      <p class="muted" id="videoInfo"></p>
+      <p class="warn" id="videoWarn" hidden>Este navegador grabó en formato WEBM. WhatsApp a veces lo manda como archivo en vez de video. Con Chrome actualizado se graba en MP4.</p>
+      <div class="dlg-actions">
+        <button class="btn" id="btnVideoDiscard">Descartar</button>
+        <button class="btn" data-close>Cerrar</button>
+        <button class="btn primary" id="btnVideoShare">Enviar / Guardar</button>
+      </div>
     </div>
   </dialog>
 

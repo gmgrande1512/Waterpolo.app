@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -24,6 +24,8 @@
 
   const DEFAULT_ROSTER = { A1: 2, A2: 3, A3: 4, A4: 5, A5: 6, A6: 7, D1: 2, D2: 3, D3: 4, D4: 5, D5: 6, D6: 7, DG: 1 };
   const DEFAULT_NAMES = { A: 'Ataque', D: 'Defensa' };
+
+  const DRAW_COLORS = ['#facc15', '#ef4444', '#ffffff', '#111827'];
 
   const K = { plays: 'wp.plays.v1', roster: 'wp.roster.v1', current: 'wp.current.v1', prefs: 'wp.prefs.v1' };
 
@@ -55,6 +57,17 @@
     }
     if (s && Array.isArray(s.hidden)) out.hidden = s.hidden.filter((h) => PIECE[h]);
     if (s && typeof s.note === 'string') out.note = s.note.slice(0, 240);
+    // Dibujos del paso: [{ c: color, a: true si termina en flecha, p: [[x,y], ...] }]
+    out.draw = [];
+    if (s && Array.isArray(s.draw)) {
+      for (const d of s.draw.slice(0, 80)) {
+        if (!d || !Array.isArray(d.p) || d.p.length < 2) continue;
+        const pts = d.p.slice(0, 400).filter((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1]))
+          .map((q) => [round(clamp(+q[0], -1, 26)), round(clamp(+q[1], -1, 21))]);
+        if (pts.length < 2) continue;
+        out.draw.push({ c: DRAW_COLORS.includes(d.c) ? d.c : DRAW_COLORS[0], a: !!d.a, p: pts });
+      }
+    }
     return out;
   }
 
@@ -72,7 +85,7 @@
   }
 
   function newPlay() {
-    return { id: null, builtin: false, name: 'Jugada nueva', category: 'Mis jugadas', description: '', view: 'half', steps: [window.WP.defaultStep()] };
+    return { id: null, builtin: false, name: 'Jugada nueva', category: 'Mis jugadas', description: '', view: 'half', steps: [normalizeStep(window.WP.defaultStep())] };
   }
 
   /* ================= Estado ================= */
@@ -155,6 +168,12 @@
     const svg = $('#pool');
     if (orient === 'landscape') svg.setAttribute('viewBox', `${x0} -1 ${len} ${wid}`);
     else svg.setAttribute('viewBox', `-1 ${25 - x1} ${wid} ${len}`);
+    // El dibujo ocupa exactamente la vista elegida, arriba y centrado (sin mostrar de más)
+    const vw = orient === 'landscape' ? len : wid, vh = orient === 'landscape' ? wid : len;
+    const sc = Math.min(W / vw, H / vh);
+    svg.style.width = Math.floor(vw * sc) + 'px';
+    svg.style.height = Math.floor(vh * sc) + 'px';
+    svg.style.left = Math.floor((W - vw * sc) / 2) + 'px';
     const key = orient + play.view;
     if (key !== lastLayoutKey) {
       lastLayoutKey = key;
@@ -224,11 +243,41 @@
     }
   }
 
-  function renderFrame(pos, opac, arrowPair) {
+  // Dibuja un trazo (en coordenadas de la pileta) dentro del grupo g.
+  function drawStroke(d, g, opacity) {
+    const pts = d.p.map(toView);
+    const attrs = { points: pts.map((q) => q[0] + ',' + q[1]).join(' '), class: 'stroke', stroke: d.c };
+    if (opacity != null && opacity < 1) attrs.opacity = opacity;
+    const line = el('polyline', attrs, g);
+    if (d.a && pts.length >= 2) {
+      // Punta de flecha según la dirección del final del trazo
+      const end = pts[pts.length - 1];
+      let k = pts.length - 2;
+      while (k > 0 && Math.hypot(end[0] - pts[k][0], end[1] - pts[k][1]) < 0.5) k--;
+      const from = pts[k];
+      const ang = Math.atan2(end[1] - from[1], end[0] - from[0]);
+      const L = 0.6, W = 0.38;
+      const bx = end[0] - Math.cos(ang) * L, by = end[1] - Math.sin(ang) * L;
+      const px = -Math.sin(ang) * W, py = Math.cos(ang) * W;
+      const head = { points: `${end[0]},${end[1]} ${bx + px},${by + py} ${bx - px},${by - py}`, class: 'stroke-head', fill: d.c };
+      if (attrs.opacity) head.opacity = attrs.opacity;
+      el('polygon', head, g);
+    }
+    return line;
+  }
+
+  function renderDrawings(list, opacity) {
+    const dg = $('#drawG');
+    dg.innerHTML = '';
+    for (const d of list || []) drawStroke(d, dg, opacity);
+  }
+
+  function renderFrame(pos, opac, arrowPair, drawings, drawOpacity) {
     const ag = $('#arrowsG'), pg = $('#piecesG');
     ag.innerHTML = '';
     pg.innerHTML = '';
     if (arrowPair) drawArrows(arrowPair[0], arrowPair[1]);
+    renderDrawings(drawings, drawOpacity);
 
     for (const p of PIECES) {
       const o = opac[p.id] == null ? 1 : opac[p.id];
@@ -256,7 +305,7 @@
   function renderCurrent() {
     const s = step();
     const pair = prefs.arrows && idx > 0 ? [play.steps[idx - 1], s] : null;
-    renderFrame(s.pos, opacityFor(s), pair);
+    renderFrame(s.pos, opacityFor(s), pair, s.draw);
     showCaption(s.note);
     updateUI();
   }
@@ -292,6 +341,7 @@
     $('#btnArrows').classList.toggle('off', !prefs.arrows);
     $('#speed').value = String(prefs.speed);
     renderBench();
+    if (drawState.on) updateDrawBar();
   }
 
   function renderBench() {
@@ -329,9 +379,29 @@
   /* ================= Arrastre ================= */
 
   let drag = null;
+  let pen = null;            // trazo en curso
   const svg = $('#pool');
+  const drawState = { on: false, color: DRAW_COLORS[0], arrow: true };
+
+  function penMove(e) {
+    const m = clientToModel(e.clientX, e.clientY);
+    const lastPt = pen.d.p[pen.d.p.length - 1];
+    if (Math.hypot(m[0] - lastPt[0], m[1] - lastPt[1]) < 0.12) return;
+    pen.d.p.push([round(m[0]), round(m[1])]);
+    pen.g.innerHTML = '';
+    drawStroke(pen.d, pen.g);
+  }
 
   svg.addEventListener('pointerdown', (e) => {
+    if (drawState.on) {
+      if (pen) return;
+      if (anim) stopAnim();
+      const m = clientToModel(e.clientX, e.clientY);
+      pen = { pointer: e.pointerId, d: { c: drawState.color, a: drawState.arrow, p: [[round(m[0]), round(m[1])]] }, g: el('g', {}, $('#drawG')) };
+      svg.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
     const g = e.target.closest('[data-id]');
     if (!g) return;
     if (anim) stopAnim();
@@ -345,6 +415,7 @@
   });
 
   svg.addEventListener('pointermove', (e) => {
+    if (pen && e.pointerId === pen.pointer) { penMove(e); return; }
     if (!drag || e.pointerId !== drag.pointer) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
     drag.moved = true;
@@ -358,6 +429,18 @@
   });
 
   function endDrag(e) {
+    if (pen && e.pointerId === pen.pointer) {
+      const d = pen.d;
+      pen = null;
+      try { svg.releasePointerCapture(e.pointerId); } catch (err) { /* nada */ }
+      const len = d.p.reduce((acc, q, i) => (i ? acc + Math.hypot(q[0] - d.p[i - 1][0], q[1] - d.p[i - 1][1]) : 0), 0);
+      if (d.p.length >= 2 && len > 0.4 && e.type === 'pointerup') {
+        step().draw.push(d);
+        markDirty();
+      }
+      renderCurrent();
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointer) return;
     const d = drag;
     drag = null;
@@ -398,7 +481,9 @@
         const hf = from.hidden.includes(id), ht = to.hidden.includes(id);
         op[id] = hf && ht ? 0 : hf ? e : ht ? 1 - e : 1;
       }
-      renderFrame(pos, op, prefs.arrows ? [from, to] : null);
+      // Los dibujos del paso anterior se apagan y aparecen los del siguiente
+      const drawings = e < 0.5 ? from.draw : to.draw;
+      renderFrame(pos, op, prefs.arrows ? [from, to] : null, drawings, Math.abs(1 - 2 * e));
       if (t < 1) anim.raf = requestAnimationFrame(tick);
       else { idx = j; saveCurrent(); done(); }
     };
@@ -437,6 +522,7 @@
     stopAnim();
     const s = clone(step());
     s.note = '';
+    s.draw = [];
     play.steps.splice(idx + 1, 0, s);
     idx++;
     markDirty();
@@ -718,6 +804,301 @@
     }
   };
 
+  /* ================= Dibujo ================= */
+
+  function setDrawMode(on) {
+    drawState.on = on;
+    if (on) stopAnim();
+    $('#drawBar').hidden = !on;
+    $('#btnDraw').classList.toggle('active', on);
+    svg.classList.toggle('drawing', on);
+    updateDrawBar();
+  }
+
+  function updateDrawBar() {
+    document.querySelectorAll('#drawBar [data-color]').forEach((b) => b.classList.toggle('active', b.dataset.color === drawState.color));
+    $('#toolArrow').classList.toggle('active', drawState.arrow);
+    $('#toolPen').classList.toggle('active', !drawState.arrow);
+    const n = step().draw.length;
+    $('#btnUndo').disabled = !n;
+    $('#btnClearDraw').disabled = !n;
+  }
+
+  document.querySelectorAll('#drawBar [data-color]').forEach((b) => {
+    b.style.background = b.dataset.color;
+    b.onclick = () => { drawState.color = b.dataset.color; updateDrawBar(); };
+  });
+  $('#btnDraw').onclick = () => setDrawMode(!drawState.on);
+  $('#btnDrawDone').onclick = () => setDrawMode(false);
+  $('#toolArrow').onclick = () => { drawState.arrow = true; updateDrawBar(); };
+  $('#toolPen').onclick = () => { drawState.arrow = false; updateDrawBar(); };
+  $('#btnUndo').onclick = () => { step().draw.pop(); markDirty(); renderCurrent(); };
+  $('#btnClearDraw').onclick = () => {
+    if (!confirm('¿Borrar todos los dibujos de este paso?')) return;
+    step().draw = [];
+    markDirty();
+    renderCurrent();
+  };
+
+  /* ================= Imagen y video para compartir ================= */
+
+  // Estilos de la pileta para poder convertir el dibujo (SVG) en imagen.
+  let svgCss = null;
+  function getSvgCss() {
+    if (svgCss) return svgCss;
+    const keep = /\.(deck|water|ripple|ln|mark|box2|net|post|piece|ball|ghost|arrow|stroke)\b/;
+    let css = '';
+    for (const sh of Array.from(document.styleSheets)) {
+      let rules;
+      try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of Array.from(rules)) if (r.selectorText && keep.test(r.selectorText)) css += r.cssText + '\n';
+    }
+    const cs = getComputedStyle(document.documentElement);
+    const vars = ['--atk', '--def', '--gk', '--accent'].map((v) => `${v}:${cs.getPropertyValue(v).trim()};`).join('');
+    svgCss = `svg{${vars}}\n${css}`;
+    return svgCss;
+  }
+
+  function svgImage(w, h) {
+    const copy = svg.cloneNode(true);
+    copy.setAttribute('width', w);
+    copy.setAttribute('height', h);
+    copy.removeAttribute('class');
+    const st = document.createElementNS(SVGNS, 'style');
+    st.textContent = getSvgCss();
+    copy.insertBefore(st, copy.firstChild);
+    const src = new XMLSerializer().serializeToString(copy);
+    const url = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+
+  // Tamaño del video/imagen según la vista actual (lado largo 1280 px, medidas pares).
+  function sizeCanvas(canvas) {
+    const vb = svg.viewBox.baseVal;
+    const ar = vb && vb.width ? vb.width / vb.height : 16 / 9;
+    const long = 1280;
+    const w = ar >= 1 ? long : Math.round(long * ar);
+    const h = ar >= 1 ? Math.round(long / ar) : long;
+    const band = Math.round(Math.max(w, h) / 1280 * 96); // franja de arriba para la nota
+    canvas.width = w - (w % 2);
+    canvas.height = h + band - ((h + band) % 2);
+    canvas.dataset.band = band;
+  }
+
+  function wrapText(ctx, text, maxW) {
+    const words = text.split(/\s+/);
+    const lines = [];
+    let line = '';
+    for (const w of words) {
+      const t = line ? line + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  async function paintFrame(canvas) {
+    const W = canvas.width, H = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const band = +canvas.dataset.band || 0;
+    const img = await svgImage(W, H - band);
+    ctx.fillStyle = '#0e2236';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, band, W, H - band);
+    const u = Math.max(W, H - band) / 1280;
+    // Nota del paso, en la franja de arriba (hasta 2 renglones)
+    ctx.fillStyle = '#0b1622';
+    ctx.fillRect(0, 0, W, band);
+    const note = $('#caption').hidden ? '' : $('#caption').textContent;
+    if (note) {
+      let size = 30;
+      let lines;
+      do {
+        ctx.font = `600 ${Math.round(size * u)}px system-ui, sans-serif`;
+        lines = wrapText(ctx, note, W - 40 * u);
+        size -= 2;
+      } while (lines.length > 2 && size > 16);
+      lines = lines.slice(0, 2);
+      const lh = size * 1.3 * u;
+      ctx.fillStyle = '#e8f0f8';
+      ctx.textBaseline = 'middle';
+      const top = band / 2 - ((lines.length - 1) * lh) / 2;
+      lines.forEach((l, i) => ctx.fillText(l, 20 * u, top + i * lh));
+    }
+    // Nombre de la jugada y paso (abajo a la izquierda)
+    ctx.font = `600 ${Math.round(20 * u)}px system-ui, sans-serif`;
+    const label = `${play.name} · Paso ${idx + 1}/${play.steps.length}`;
+    const lw = ctx.measureText(label).width + 24 * u;
+    ctx.fillStyle = 'rgba(11,22,34,.75)';
+    ctx.fillRect(16 * u, H - 52 * u, lw, 36 * u);
+    ctx.fillStyle = '#e8f0f8';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 28 * u, H - 34 * u);
+  }
+
+  function fileBase() {
+    const name = play.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    return (name || 'jugada') + '-' + new Date().toISOString().slice(0, 10);
+  }
+
+  async function shareFile(blob, fname, type) {
+    try {
+      const file = new File([blob], fname, { type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: play.name });
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    toast('Archivo descargado: ahora podés adjuntarlo en WhatsApp');
+  }
+
+  async function shareImage() {
+    $('#dlgShare').close();
+    stopAnim();
+    try {
+      const c = document.createElement('canvas');
+      sizeCanvas(c);
+      await paintFrame(c);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      await shareFile(blob, fileBase() + `-paso${idx + 1}.png`, 'image/png');
+    } catch (err) {
+      alert('No se pudo crear la imagen en este navegador.');
+    }
+  }
+
+  // ---- Grabación de video (pantalla de la pileta + micrófono) ----
+  const MAX_REC_MS = 5 * 60 * 1000;
+  let rec = null;
+
+  function pickMime(withAudio) {
+    const opts = withAudio
+      ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+      : ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    return opts.find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) || '';
+  }
+
+  const fmtTime = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+
+  async function startRecording() {
+    const withMic = $('#recMic').checked;
+    $('#dlgShare').close();
+    if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+      alert('Este navegador no permite grabar video. Probá con Chrome (Android o PC) o Safari actualizado.');
+      return;
+    }
+    stopAnim();
+    let mic = null;
+    if (withMic) {
+      try {
+        mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      } catch (err) {
+        if (!confirm('No se pudo usar el micrófono (¿permiso denegado?). ¿Grabar el video sin voz?')) return;
+      }
+    }
+    const canvas = document.createElement('canvas');
+    sizeCanvas(canvas);
+    try { await paintFrame(canvas); } catch (err) { /* se reintenta en el bucle */ }
+    const vstream = canvas.captureStream(30);
+    const stream = new MediaStream([...vstream.getVideoTracks(), ...(mic ? mic.getAudioTracks() : [])]);
+    const mime = pickMime(!!mic);
+    let mr;
+    try {
+      mr = new MediaRecorder(stream, Object.assign({ videoBitsPerSecond: 2000000 }, mime ? { mimeType: mime } : {}));
+    } catch (err) {
+      mr = new MediaRecorder(stream);
+    }
+    rec = { mr, mic, vstream, canvas, chunks: [], t0: performance.now(), painting: false, last: 0, raf: 0, timer: 0 };
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) rec.chunks.push(e.data); };
+    mr.onstop = finishRecording;
+    mr.start(1000);
+
+    const loop = (now) => {
+      if (!rec) return;
+      if (!rec.painting && now - rec.last > 38) {
+        rec.painting = true;
+        rec.last = now;
+        paintFrame(rec.canvas).catch(() => {}).then(() => { if (rec) rec.painting = false; });
+      }
+      rec.raf = requestAnimationFrame(loop);
+    };
+    rec.raf = requestAnimationFrame(loop);
+
+    $('#recBar').hidden = false;
+    $('#recMicIcon').hidden = !mic;
+    $('#btnShare').disabled = true;
+    const tick = () => {
+      if (!rec) return;
+      const el2 = performance.now() - rec.t0;
+      $('#recTime').textContent = fmtTime(el2);
+      if (el2 >= MAX_REC_MS) { stopRecording(); toast('Se alcanzó el máximo de 5 minutos'); }
+    };
+    tick();
+    rec.timer = setInterval(tick, 500);
+  }
+
+  function stopRecording() {
+    if (!rec || rec.mr.state === 'inactive') return;
+    rec.mr.stop();
+  }
+
+  function finishRecording() {
+    const r = rec;
+    rec = null;
+    cancelAnimationFrame(r.raf);
+    clearInterval(r.timer);
+    if (r.mic) r.mic.getTracks().forEach((t) => t.stop());
+    r.vstream.getTracks().forEach((t) => t.stop());
+    $('#recBar').hidden = true;
+    $('#btnShare').disabled = false;
+    const type = (r.mr.mimeType || (r.chunks[0] && r.chunks[0].type) || 'video/webm').split(';')[0];
+    const blob = new Blob(r.chunks, { type });
+    if (!blob.size) { alert('No se grabó nada. Probá de nuevo.'); return; }
+    const ext = type.includes('mp4') ? 'mp4' : 'webm';
+    lastVideo = { blob, name: `${fileBase()}.${ext}`, type };
+    const v = $('#videoPreview');
+    if (v.src) URL.revokeObjectURL(v.src);
+    v.src = URL.createObjectURL(blob);
+    $('#videoInfo').textContent = `${fmtTime(performance.now() - r.t0)} · ${(blob.size / 1048576).toFixed(1)} MB · ${ext.toUpperCase()}`;
+    $('#videoWarn').hidden = ext === 'mp4';
+    $('#dlgVideo').showModal();
+  }
+
+  let lastVideo = null;
+  $('#btnShare').onclick = () => {
+    stopAnim();
+    $('#recSupport').hidden = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream);
+    $('#dlgShare').showModal();
+  };
+  $('#btnShareImg').onclick = shareImage;
+  $('#btnStartRec').onclick = startRecording;
+  $('#btnStopRec').onclick = stopRecording;
+  $('#btnVideoShare').onclick = () => { if (lastVideo) shareFile(lastVideo.blob, lastVideo.name, lastVideo.type); };
+  $('#btnVideoDiscard').onclick = () => {
+    if (!confirm('¿Descartar el video?')) return;
+    const v = $('#videoPreview');
+    v.pause();
+    if (v.src) URL.revokeObjectURL(v.src);
+    v.removeAttribute('src');
+    lastVideo = null;
+    $('#dlgVideo').close();
+  };
+
   /* ================= Botones ================= */
 
   $('#btnLib').onclick = () => { stopAnim(); $('#libSearch').value = ''; renderLibrary(); $('#dlgLib').showModal(); };
@@ -760,7 +1141,7 @@
   // Cerrar diálogos: botón [data-close] o tocando afuera
   document.querySelectorAll('dialog').forEach((d) => {
     d.addEventListener('click', (e) => {
-      if (e.target === d || e.target.closest('[data-close]')) d.close();
+      if (e.target.closest('[data-close]') || (e.target === d && !d.hasAttribute('data-keep'))) d.close();
     });
   });
 
