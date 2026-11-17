@@ -133,9 +133,10 @@ body {
 
 #caption {
   position: absolute;
-  left: 12px; top: 12px;
-  max-width: min(560px, calc(100% - 24px));
-  background: rgba(11, 22, 34, .82);
+  left: 50%; bottom: 60px; transform: translateX(-50%);
+  width: min(720px, calc(100% - 24px));
+  max-height: 40%; overflow: auto;
+  background: rgba(11, 22, 34, .9);
   border: 1px solid rgba(255,255,255,.18);
   border-radius: var(--radius);
   padding: 8px 12px;
@@ -144,7 +145,14 @@ body {
   pointer-events: none;
   backdrop-filter: blur(6px);
 }
-.stage-tools { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; }
+#caption.side { left: 12px; top: 12px; bottom: auto; transform: none; max-height: calc(100% - 80px); }
+.stage-tools { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; left: 12px; pointer-events: none; }
+.stage-tools .chip { pointer-events: auto; }
+#btnNotes { position: relative; }
+#btnNotes.has-note::after {
+  content: ""; position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%;
+  background: #f43f5e; border: 2px solid var(--bg);
+}
 
 #bench {
   display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
@@ -247,7 +255,7 @@ textarea.input { resize: vertical; }
   .controls .btn { min-height: 38px; min-width: 38px; }
   .controls .btn.rec span { display: none; }
   .note { min-height: 38px; }
-  #caption { font-size: 13px; padding: 6px 10px; }
+  #caption { font-size: 13px; padding: 6px 10px; bottom: 52px; }
 }
 
 /* ---------- Dibujo ---------- */

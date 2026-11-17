@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.4.1';
+  const APP_VERSION = '1.4.2';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -174,6 +174,11 @@
     svg.style.width = Math.floor(vw * sc) + 'px';
     svg.style.height = Math.floor(vh * sc) + 'px';
     svg.style.left = Math.floor((W - vw * sc) / 2) + 'px';
+    // Si sobra lugar al costado de la pileta, la nota va ahí; si no, abajo
+    const side = (W - vw * sc) / 2;
+    const cap = $('#caption');
+    cap.classList.toggle('side', side >= 190);
+    cap.style.width = side >= 190 ? Math.floor(side - 24) + 'px' : '';
     const key = orient + play.view;
     if (key !== lastLayoutKey) {
       lastLayoutKey = key;
@@ -310,10 +315,17 @@
     updateUI();
   }
 
+  // Nota del paso: solo se ve si está activado el botón "Nota" (y nunca mientras se dibuja)
+  let captionText = '';
   function showCaption(text) {
+    captionText = text || '';
     const c = $('#caption');
-    c.textContent = text || '';
-    c.hidden = !text;
+    c.textContent = captionText;
+    c.hidden = !(prefs.notes && captionText) || drawState.on;
+    const b = $('#btnNotes');
+    b.classList.toggle('active', !!prefs.notes);
+    b.classList.toggle('has-note', !!captionText);
+    b.title = captionText ? 'Ver u ocultar la nota de este paso' : 'Este paso no tiene nota';
   }
 
   /* ================= Interfaz ================= */
@@ -836,6 +848,7 @@
     $('#drawBar').hidden = !on;
     $('#btnDraw').classList.toggle('active', on);
     svg.classList.toggle('drawing', on);
+    showCaption(captionText);
     updateDrawBar();
   }
 
@@ -938,7 +951,7 @@
     // Nota del paso, en la franja de arriba (hasta 2 renglones)
     ctx.fillStyle = '#0b1622';
     ctx.fillRect(0, 0, W, band);
-    const note = $('#caption').hidden ? '' : $('#caption').textContent;
+    const note = captionText; // en foto y video la nota va siempre, en su franja
     if (note) {
       let size = 30;
       let lines;
@@ -1400,6 +1413,12 @@
   $('#btnAddStep').onclick = addStep;
   $('#btnDelStep').onclick = delStep;
   $('#speed').onchange = (e) => { prefs.speed = +e.target.value || 1; savePrefs(); };
+  $('#btnNotes').onclick = () => {
+    prefs.notes = !prefs.notes;
+    savePrefs();
+    showCaption(captionText);
+    if (prefs.notes && !captionText) toast('Este paso no tiene nota');
+  };
   $('#btnArrows').onclick = () => { prefs.arrows = !prefs.arrows; savePrefs(); if (!anim) renderCurrent(); else updateUI(); };
   $('#btnView').onclick = () => {
     stopAnim();
