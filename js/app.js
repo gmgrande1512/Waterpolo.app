@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.0.0';
+  const APP_VERSION = '1.1.0';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -171,9 +171,14 @@
     el('rect', { x: 0, y: 0, width: 25, height: 20, class: 'water' }, g);
     for (let y = 2.5; y < 20; y += 2.5) el('line', { x1: 0, y1: y, x2: 25, y2: y, class: 'ripple' }, g);
 
-    // Líneas: arco (blanca), 2 m (roja), 5 m (amarilla), 6 m (verde), mitad (blanca)
-    const lines = [[0, 'goal'], [25, 'goal'], [2, 'red'], [23, 'red'], [5, 'yellow'], [20, 'yellow'], [6, 'green'], [19, 'green'], [12.5, 'half']];
+    // Líneas: arco (blanca), 5 m (amarilla), 6 m (verde), mitad (blanca)
+    const lines = [[0, 'goal'], [25, 'goal'], [5, 'yellow'], [20, 'yellow'], [6, 'green'], [19, 'green'], [12.5, 'half']];
     for (const [x, c] of lines) el('line', { x1: x, y1: 0, x2: x, y2: 20, class: 'ln ' + c }, g);
+
+    // Área de 2 m (reglas World Aquatics 2023): rectángulo desde la línea de gol
+    // hasta los 2 m, y 2 m hacia afuera de cada palo (postes en y = 8.5 y 11.5).
+    el('rect', { x: 23, y: 6.5, width: 2, height: 7, class: 'box2' }, g);
+    el('rect', { x: 0, y: 6.5, width: 2, height: 7, class: 'box2' }, g);
 
     // Marcas laterales de color sobre los bordes
     const segs = [[0, 2, 'red'], [2, 5, 'yellow'], [5, 6, 'green'], [6, 12.5, 'white'], [12.5, 19, 'white'], [19, 20, 'green'], [20, 23, 'yellow'], [23, 25, 'red']];

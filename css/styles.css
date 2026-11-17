@@ -109,6 +109,7 @@ body {
 .mark.yellow { stroke: #facc15; }
 .mark.green { stroke: #22c55e; }
 .mark.white { stroke: #fff; }
+.box2 { fill: rgba(239,68,68,.16); stroke: #ef4444; stroke-width: 0.09; }
 .net { fill: url(#netPat); stroke: #fff; stroke-width: 0.06; }
 .post { stroke: #fff; stroke-width: 0.16; stroke-linecap: round; }
 
