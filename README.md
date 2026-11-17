@@ -1,5 +1,9 @@
 # Waterpolo Táctico
 
+## 👉 [Abrir la app](https://gmgrande1512.github.io/Waterpolo.app/)
+
+`https://gmgrande1512.github.io/Waterpolo.app/`
+
 Pizarra táctica de waterpolo para acompañar las charlas técnicas, en celular o tablet.
 
 - Pileta con **6 atacantes** (gorro azul) y **6 defensores + arquero** (gorro blanco / rojo).
