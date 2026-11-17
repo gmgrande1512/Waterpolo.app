@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.3.0';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -604,13 +604,37 @@
     return true;
   }
 
+  let libCat = '';
+  function renderLibCats() {
+    const box = $('#libCats');
+    box.innerHTML = '';
+    for (const c of [''].concat(CATEGORIES)) {
+      const b = document.createElement('button');
+      b.className = 'chip' + (c === libCat ? ' active' : '');
+      b.textContent = c || 'Todas';
+      b.onclick = () => { libCat = c; renderLibrary(); };
+      box.appendChild(b);
+    }
+  }
+
+  function openLibrary(cat) {
+    stopAnim();
+    libCat = cat || '';
+    $('#libSearch').value = '';
+    renderLibrary();
+    $('#dlgLib').showModal();
+  }
+
   function renderLibrary() {
+    renderLibCats();
     const q = $('#libSearch').value.trim().toLowerCase();
     const list = $('#libList');
     list.innerHTML = '';
-    const plays = allPlays().filter((p) => !q || (p.name + ' ' + p.description + ' ' + p.category).toLowerCase().includes(q));
+    const plays = allPlays().filter((p) => (!libCat || p.category === libCat) && (!q || (p.name + ' ' + p.description + ' ' + p.category).toLowerCase().includes(q)));
     if (!plays.length) {
-      list.innerHTML = '<div class="lib-empty">No hay jugadas que coincidan.</div>';
+      list.innerHTML = libCat === 'Mis jugadas' && !q
+        ? '<div class="lib-empty">Todavía no guardaste jugadas propias. Armá una y tocá Guardar.</div>'
+        : '<div class="lib-empty">No hay jugadas que coincidan.</div>';
       return;
     }
     for (const cat of CATEGORIES) {
@@ -1099,12 +1123,72 @@
     $('#dlgVideo').close();
   };
 
+  /* ================= Portada ================= */
+
+  const homeEl = $('#home');
+  const isHome = () => !homeEl.hidden;
+
+  function renderHome() {
+    const hasWork = dirty || play.steps.length > 1 || !!play.id;
+    $('#homeContinue').hidden = !hasWork;
+    $('#homeContinueName').textContent = `${play.name} · ${play.steps.length} ${play.steps.length === 1 ? 'paso' : 'pasos'}${dirty ? ' · sin guardar' : ''}`;
+    const nBase = window.WP.plays.length, nMine = custom.length;
+    $('#homeLibInfo').textContent = `${nBase} jugadas base${nMine ? ` y ${nMine} tuya${nMine === 1 ? '' : 's'}` : ''}`;
+    const box = $('#homeCats');
+    box.innerHTML = '';
+    for (const c of CATEGORIES) {
+      const n = allPlays().filter((p) => p.category === c).length;
+      if (!n && c !== 'Mis jugadas') continue;
+      const b = document.createElement('button');
+      b.className = 'home-cat';
+      b.innerHTML = '<b></b><span></span>';
+      b.firstChild.textContent = c;
+      b.lastChild.textContent = n === 1 ? '1 jugada' : `${n} jugadas`;
+      b.onclick = () => { hideHome(); openLibrary(c); };
+      box.appendChild(b);
+    }
+    $('#homeVersion').textContent = APP_VERSION;
+  }
+
+  function showHome() {
+    stopAnim();
+    if (drawState.on) setDrawMode(false);
+    if (rec) return toast('Primero detené la grabación');
+    renderHome();
+    homeEl.hidden = false;
+    homeEl.scrollTop = 0;
+  }
+
+  function hideHome() {
+    homeEl.hidden = true;
+    // El botón "atrás" del celular vuelve a la portada
+    if (!history.state || history.state.wp !== 'board') {
+      try { history.pushState({ wp: 'board' }, ''); } catch (e) { /* nada */ }
+    }
+    layout();
+  }
+
+  window.addEventListener('popstate', () => { if (!isHome()) showHome(); });
+  $('#btnHome').onclick = () => {
+    if (history.state && history.state.wp === 'board') history.back();
+    else showHome();
+  };
+  $('#homeContinue').onclick = hideHome;
+  $('#homeNew').onclick = () => { if (startNewPlay()) hideHome(); };
+  $('#homeLib').onclick = () => { hideHome(); openLibrary(); };
+  $('#homeTeam').onclick = () => { hideHome(); $('#btnOpts').click(); };
+  $('#homeHelp').onclick = () => {
+    hideHome();
+    $('#btnOpts').click();
+    setTimeout(() => { const h = $('#helpUse'); if (h) h.scrollIntoView({ block: 'start' }); }, 50);
+  };
+
   /* ================= Botones ================= */
 
-  $('#btnLib').onclick = () => { stopAnim(); $('#libSearch').value = ''; renderLibrary(); $('#dlgLib').showModal(); };
+  $('#btnLib').onclick = () => openLibrary();
   $('#libSearch').oninput = renderLibrary;
-  $('#btnNew').onclick = () => {
-    if (!confirmDiscard()) return;
+  function startNewPlay() {
+    if (!confirmDiscard()) return false;
     stopAnim();
     play = newPlay();
     idx = 0;
@@ -1112,7 +1196,9 @@
     saveCurrent();
     layout();
     toast('Jugada nueva: ubicá a los jugadores y agregá pasos');
-  };
+    return true;
+  }
+  $('#btnNew').onclick = startNewPlay;
   $('#btnSave').onclick = openSave;
   $('#btnOpts').onclick = () => { stopAnim(); renderRoster(); $('#dlgOpts').showModal(); };
   $('#btnFirst').onclick = () => { stopAnim(); idx = 0; saveCurrent(); renderCurrent(); };
@@ -1147,7 +1233,7 @@
 
   // Atajos de teclado (útil con tablet + teclado o en la compu)
   document.addEventListener('keydown', (e) => {
-    if (document.querySelector('dialog[open]') || e.target.matches('input, textarea, select')) return;
+    if (isHome() || document.querySelector('dialog[open]') || e.target.matches('input, textarea, select')) return;
     if (e.key === ' ') { e.preventDefault(); playAll(); }
     else if (e.key === 'ArrowRight') nextStep();
     else if (e.key === 'ArrowLeft') $('#btnPrev').click();
@@ -1160,6 +1246,7 @@
 
   new ResizeObserver(() => layout()).observe($('#stage'));
   layout();
+  renderHome(); // la app arranca en la portada
 
   // Funcionamiento sin conexión (cuando se sirve por https)
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

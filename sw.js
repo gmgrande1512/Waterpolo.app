@@ -1,6 +1,6 @@
 /* Service worker: permite usar la app sin internet.
  * IMPORTANTE: cambiar CACHE cada vez que se publica una versión nueva. */
-const CACHE = 'wp-tactico-v1.2.0';
+const CACHE = 'wp-tactico-v1.3.0';
 const ASSETS = [
   './',
   './index.html',
