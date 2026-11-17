@@ -265,6 +265,14 @@
         <h2>Compartir</h2>
         <button class="btn icon" data-close title="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
+      <div class="share-opt as-box">
+        <b>🔗 Enviar la jugada</b>
+        <span>Sin audio ni dibujos. Quien la recibe la abre en la app, la ve animada paso a paso y puede guardarse una copia.</span>
+        <div class="row">
+          <button class="btn primary" id="btnSharePlayLink">Enviar link</button>
+          <button class="btn" id="btnSharePlayFile">Enviar archivo</button>
+        </div>
+      </div>
       <button class="share-opt" id="btnShareImg">
         <b>📷 Foto del paso actual</b>
         <span>Una imagen de la pileta como se ve ahora, con la nota y los dibujos.</span>
@@ -290,6 +298,20 @@
         <button class="btn" id="btnVideoDiscard">Descartar</button>
         <button class="btn" data-close>Cerrar</button>
         <button class="btn primary" id="btnVideoShare">Enviar / Guardar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Jugada recibida por link -->
+  <dialog id="dlgShared">
+    <div class="dlg">
+      <h2>Te compartieron una jugada</h2>
+      <p><b id="sharedName"></b></p>
+      <p class="muted" id="sharedInfo"></p>
+      <div class="dlg-actions">
+        <button class="btn" data-close>Ahora no</button>
+        <button class="btn" id="btnSharedView">Ver</button>
+        <button class="btn primary" id="btnSharedSave">Guardar en mi biblioteca</button>
       </div>
     </div>
   </dialog>

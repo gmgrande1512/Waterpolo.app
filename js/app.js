@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.3.0';
+  const APP_VERSION = '1.4.0';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -1110,6 +1110,121 @@
     $('#dlgShare').showModal();
   };
   $('#btnShareImg').onclick = shareImage;
+
+  /* ---- Enviar la jugada (link o archivo), sin audio ni dibujos ---- */
+  const b64url = (bytes) => {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  const unb64url = (str) => {
+    const s = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  };
+  async function streamBytes(bytes, ts) {
+    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(ts)).arrayBuffer());
+  }
+  const r1 = (v) => Math.round(v * 10) / 10;
+
+  // Formato corto para que el link no sea tan largo
+  function compactPlay(p) {
+    return {
+      v: 1, n: p.name, c: p.category, d: p.description, w: p.view,
+      s: p.steps.map((s) => {
+        const pos = {};
+        for (const id of IDS) pos[id] = [r1(s.pos[id][0]), r1(s.pos[id][1])];
+        const o = { p: pos };
+        if (s.hidden.length) o.h = s.hidden;
+        if (s.note) o.t = s.note;
+        return o;
+      }),
+    };
+  }
+  function expandPlay(o) {
+    if (!o || !Array.isArray(o.s)) return null;
+    return normalizePlay({ id: uid(), name: o.n, category: o.c, description: o.d, view: o.w,
+      steps: o.s.map((s) => ({ pos: s.p, hidden: s.h || [], note: s.t || '' })) });
+  }
+  async function encodePlay(p) {
+    const bytes = new TextEncoder().encode(JSON.stringify(compactPlay(p)));
+    if (window.CompressionStream) {
+      try { return 'z' + b64url(await streamBytes(bytes, new CompressionStream('deflate-raw'))); } catch (e) { /* sin comprimir */ }
+    }
+    return 'p' + b64url(bytes);
+  }
+  async function decodePlay(code) {
+    let bytes = unb64url(code.slice(1));
+    if (code[0] === 'z') bytes = await streamBytes(bytes, new DecompressionStream('deflate-raw'));
+    return expandPlay(JSON.parse(new TextDecoder().decode(bytes)));
+  }
+  const shareBase = () => location.origin + location.pathname;
+
+  async function sharePlayLink() {
+    $('#dlgShare').close();
+    stopAnim();
+    const url = shareBase() + '#j=' + (await encodePlay(play));
+    const text = `Jugada de waterpolo: ${play.name} (${play.steps.length} pasos). Abrila acá:`;
+    try {
+      if (navigator.share) { await navigator.share({ title: play.name, text, url }); return; }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+    try {
+      await navigator.clipboard.writeText(text + '\n' + url);
+      toast('Link copiado: pegalo en WhatsApp');
+    } catch (e) {
+      prompt('Copiá este link y pegalo en WhatsApp:', url);
+    }
+  }
+
+  async function sharePlayFile() {
+    $('#dlgShare').close();
+    stopAnim();
+    const p = normalizePlay(Object.assign(clone(play), { id: play.id || uid() }));
+    p.steps.forEach((s) => { s.draw = []; });
+    const data = JSON.stringify({ app: 'waterpolo-tactico', version: 1, exported: new Date().toISOString(), plays: [p] }, null, 1);
+    await shareFile(new Blob([data], { type: 'application/json' }), fileBase() + '.json', 'application/json');
+  }
+  $('#btnSharePlayLink').onclick = sharePlayLink;
+  $('#btnSharePlayFile').onclick = sharePlayFile;
+
+  // Al abrir un link compartido: ofrecer verla o guardarla
+  let pendingShared = null;
+  async function checkSharedLink() {
+    const m = location.hash.match(/^#j=([A-Za-z0-9_-]+)/);
+    if (!m) return;
+    try { history.replaceState(history.state, '', shareBase()); } catch (e) { /* nada */ }
+    let p = null;
+    try { p = await decodePlay(m[1]); } catch (e) { p = null; }
+    if (!p) { alert('El link de la jugada está incompleto o dañado.'); return; }
+    pendingShared = p;
+    $('#sharedName').textContent = p.name;
+    $('#sharedInfo').textContent = `${p.category} · ${p.steps.length} pasos${p.description ? ' · ' + p.description : ''}`;
+    $('#dlgShared').showModal();
+  }
+  $('#btnSharedView').onclick = () => {
+    const p = pendingShared;
+    $('#dlgShared').close();
+    if (p && openPlay(Object.assign(clone(p), { id: null, builtin: false }))) {
+      hideHome();
+      toast('Tocá Guardar para quedarte con una copia');
+    }
+  };
+  $('#btnSharedSave').onclick = () => {
+    const p = pendingShared;
+    if (!p) return;
+    const obj = Object.assign(clone(p), { id: uid(), updated: Date.now() });
+    const next = custom.concat(obj);
+    if (!store.set(K.plays, next)) { alert('No se pudo guardar: el almacenamiento está lleno o bloqueado.'); return; }
+    custom = next;
+    $('#dlgShared').close();
+    dirty = false;
+    if (openPlay(Object.assign(clone(obj), { builtin: false }))) hideHome();
+    toast('Jugada guardada en tu biblioteca');
+  };
+  window.addEventListener('hashchange', checkSharedLink);
   $('#btnStartRec').onclick = startRecording;
   $('#btnStopRec').onclick = stopRecording;
   $('#btnVideoShare').onclick = () => { if (lastVideo) shareFile(lastVideo.blob, lastVideo.name, lastVideo.type); };
@@ -1247,6 +1362,7 @@
   new ResizeObserver(() => layout()).observe($('#stage'));
   layout();
   renderHome(); // la app arranca en la portada
+  checkSharedLink();
 
   // Funcionamiento sin conexión (cuando se sirve por https)
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
