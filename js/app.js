@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const $ = (s) => document.querySelector(s);
 
@@ -782,7 +782,19 @@
 
   // Funcionamiento sin conexión (cuando se sirve por https)
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+      // Buscar versión nueva cada vez que se vuelve a la app
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+    }).catch(() => {});
+    // Cuando se instala una versión nueva, recargar solo una vez para mostrarla
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      saveCurrent();
+      location.reload();
+    });
   }
 
   // Para pruebas automáticas

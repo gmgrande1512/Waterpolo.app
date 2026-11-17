@@ -1,6 +1,6 @@
 /* Service worker: permite usar la app sin internet.
  * IMPORTANTE: cambiar CACHE cada vez que se publica una versión nueva. */
-const CACHE = 'wp-tactico-v1.1.0';
+const CACHE = 'wp-tactico-v1.1.1';
 const ASSETS = [
   './',
   './index.html',
@@ -15,7 +15,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -27,11 +27,13 @@ self.addEventListener('activate', (e) => {
 });
 
 // Primero la red (para recibir actualizaciones); si no hay conexión, lo guardado.
+// cache: 'no-cache' obliga a consultar a GitHub si hay una versión nueva, en vez de
+// usar la copia del navegador (GitHub Pages la guarda hasta 10 minutos).
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
