@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Waterpolo Táctico</title>
+  <meta name="description" content="Pizarra táctica de waterpolo para charlas técnicas: jugadores, jugadas paso a paso y biblioteca.">
+  <meta name="theme-color" content="#0b1622">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WP Táctico">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="btn" id="btnLib" title="Biblioteca de jugadas">
+      <svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/><path d="M9 7h6"/></svg>
+      <span class="lbl">Biblioteca</span>
+    </button>
+    <div class="title">
+      <div id="playName">Jugada nueva</div>
+      <div id="playCat" class="sub"></div>
+    </div>
+    <button class="btn" id="btnNew" title="Nueva jugada">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="lbl">Nueva</span>
+    </button>
+    <button class="btn primary" id="btnSave" title="Guardar en la biblioteca">
+      <svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3"/><path d="M8 21v-7h8v7"/></svg>
+      <span class="lbl">Guardar</span>
+    </button>
+    <button class="btn" id="btnOpts" title="Opciones y números">
+      <svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      <span class="lbl">Opciones</span>
+    </button>
+  </header>
+
+  <main id="stage">
+    <svg id="pool" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="Pileta de waterpolo">
+      <defs>
+        <linearGradient id="waterGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#1a86d6"/>
+          <stop offset="1" stop-color="#0d5ea8"/>
+        </linearGradient>
+        <pattern id="netPat" width="0.3" height="0.3" patternUnits="userSpaceOnUse">
+          <path d="M0 0L0.3 0.3M0.3 0L0 0.3" stroke="rgba(255,255,255,.55)" stroke-width="0.03"/>
+        </pattern>
+        <marker id="mkA" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.8" markerHeight="0.8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#93c5fd"/></marker>
+        <marker id="mkD" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.8" markerHeight="0.8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#ffffff"/></marker>
+        <marker id="mkG" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.8" markerHeight="0.8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#fca5a5"/></marker>
+        <marker id="mkB" viewBox="0 0 10 10" refX="8" refY="5" markerUnits="userSpaceOnUse" markerWidth="0.7" markerHeight="0.7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#facc15"/></marker>
+      </defs>
+      <g id="poolG"></g>
+      <g id="arrowsG"></g>
+      <g id="piecesG"></g>
+    </svg>
+    <div id="caption" hidden></div>
+    <div class="stage-tools">
+      <button class="chip" id="btnView" title="Cambiar vista">Media pileta</button>
+      <button class="chip" id="btnArrows" title="Mostrar u ocultar flechas de movimiento">Flechas</button>
+    </div>
+  </main>
+
+  <div id="bench" hidden></div>
+
+  <footer class="controls">
+    <div class="group">
+      <button class="btn icon" id="btnFirst" title="Ir al primer paso"><svg viewBox="0 0 24 24"><path d="M6 5v14"/><path d="M18 5l-9 7 9 7z"/></svg></button>
+      <button class="btn icon" id="btnPrev" title="Paso anterior"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="btn icon primary" id="btnPlay" title="Reproducir"><svg viewBox="0 0 24 24" id="icoPlay"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg></button>
+      <button class="btn icon" id="btnNext" title="Paso siguiente"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <span id="stepLabel" class="step-label">Paso 1/1</span>
+      <select id="speed" class="btn sel" title="Velocidad">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+    </div>
+    <div class="group">
+      <button class="btn rec" id="btnAddStep" title="Agregar un paso nuevo a partir de este">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>
+        <span>Agregar paso</span>
+      </button>
+      <button class="btn icon" id="btnDelStep" title="Borrar este paso"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+    </div>
+    <input id="note" class="note" type="text" maxlength="240" placeholder="Nota de este paso (se ve sobre la pileta)…">
+  </footer>
+
+  <!-- Jugador -->
+  <dialog id="dlgPiece">
+    <form method="dialog" class="dlg">
+      <h2 id="pieceTitle">Jugador</h2>
+      <p class="muted">Elegí el número del gorro (si otro compañero ya lo tiene, se intercambian).</p>
+      <div id="numGrid" class="num-grid"></div>
+      <div class="dlg-actions">
+        <button type="button" class="btn" id="btnHidePiece">Sacar del agua en este paso</button>
+        <button class="btn primary" value="close">Listo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Biblioteca -->
+  <dialog id="dlgLib" class="wide">
+    <div class="dlg">
+      <div class="dlg-head">
+        <h2>Biblioteca de jugadas</h2>
+        <button class="btn icon" data-close title="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <input id="libSearch" class="input" type="search" placeholder="Buscar jugada…">
+      <div id="libList" class="lib-list"></div>
+    </div>
+  </dialog>
+
+  <!-- Guardar -->
+  <dialog id="dlgSave">
+    <form class="dlg" id="saveForm">
+      <h2>Guardar jugada</h2>
+      <label>Nombre<input id="saveName" class="input" required maxlength="80"></label>
+      <label>Categoría<select id="saveCat" class="input"></select></label>
+      <label>Descripción<textarea id="saveDesc" class="input" rows="3" maxlength="400"></textarea></label>
+      <label class="check" id="saveAsNewWrap"><input type="checkbox" id="saveAsNew"> Guardar como jugada nueva (copia)</label>
+      <p class="muted" id="saveHint"></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn" data-close>Cancelar</button>
+        <button type="submit" class="btn primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Opciones -->
+  <dialog id="dlgOpts" class="wide">
+    <div class="dlg">
+      <div class="dlg-head">
+        <h2>Opciones</h2>
+        <button class="btn icon" data-close title="Cerrar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+
+      <h3>Números de los jugadores</h3>
+      <p class="muted">Los números se usan en todas las jugadas. Del 1 al 15.</p>
+      <div class="roster" id="roster"></div>
+      <p class="warn" id="rosterWarn" hidden></p>
+      <button class="btn" id="btnResetRoster">Volver a los números de fábrica</button>
+
+      <h3>Copia de seguridad</h3>
+      <p class="muted">Las jugadas se guardan en este dispositivo. Exportalas para pasarlas a otro celular o tablet, o para no perderlas.</p>
+      <div class="row">
+        <button class="btn" id="btnExport">Exportar mis jugadas</button>
+        <label class="btn" for="importFile">Importar jugadas</label>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+
+      <h3>Instalar en el celular o tablet</h3>
+      <ul class="muted help">
+        <li><b>Android (Chrome):</b> menú ⋮ → “Instalar aplicación” o “Agregar a pantalla principal”.</li>
+        <li><b>iPhone / iPad (Safari):</b> botón Compartir → “Agregar a inicio”.</li>
+        <li>Una vez instalada funciona sin internet.</li>
+      </ul>
+
+      <h3>Cómo usarla</h3>
+      <ul class="muted help">
+        <li>Arrastrá los gorros y la pelota con el dedo.</li>
+        <li>Tocá un gorro (sin arrastrar) para cambiarle el número o sacarlo del agua (exclusión).</li>
+        <li><b>Agregar paso</b> copia la posición actual en un paso nuevo: mové a los jugadores y repetí. Así se “graba” la jugada.</li>
+        <li><b>▶</b> reproduce la jugada animada, paso por paso.</li>
+        <li><b>Guardar</b> la manda a la biblioteca.</li>
+      </ul>
+      <p class="muted small">Versión <span id="appVersion"></span></p>
+    </div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/plays.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
